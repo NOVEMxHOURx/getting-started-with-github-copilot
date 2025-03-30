@@ -1,0 +1,129 @@
+package com.frostking.scythe;
+
+import org.bukkit.*;
+import org.bukkit.block.Block;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.Vector;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.UUID;
+
+public class FrostScythePlugin extends JavaPlugin implements Listener, CommandExecutor {
+    private final HashMap<UUID, Long> abilityCooldowns = new HashMap<>();
+    private final long cooldownTime = 23000; // 23 seconds cooldown in milliseconds
+
+    @Override
+    public void onEnable() {
+        Bukkit.getPluginManager().registerEvents(this, this);
+        this.getCommand("givefrostscythe").setExecutor(this);
+        this.getCommand("spawnfrostcastle").setExecutor(this);
+    }
+
+    public static ItemStack createFrostScythe() {
+        ItemStack scythe = new ItemStack(Material.NETHERITE_AXE);
+        ItemMeta meta = scythe.getItemMeta();
+        assert meta != null;
+        meta.setDisplayName(ChatColor.AQUA + "Frost " + ChatColor.BLUE + "Scythe");
+        meta.setLore(List.of(
+                ChatColor.GRAY + "Forged in the heart of an eternal blizzard,",
+                ChatColor.GRAY + "this cursed blade freezes all who stand in its path.",
+                ChatColor.DARK_AQUA + "Wielded by the Frost King himself,",
+                ChatColor.DARK_AQUA + "it grants its master immense power over ice.",
+                "",
+                ChatColor.BLUE + "You are the Frost King now..."
+        ));
+        meta.getPersistentDataContainer().set(new NamespacedKey("frostking", "scythe"), PersistentDataType.INTEGER, 1);
+        scythe.setItemMeta(meta);
+        return scythe;
+    }
+
+    @EventHandler
+    public void onPlayerUseScythe(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        ItemStack item = player.getInventory().getItemInMainHand();
+        if (!isFrostScythe(item)) return;
+
+        long currentTime = System.currentTimeMillis();
+        if (abilityCooldowns.containsKey(player.getUniqueId()) &&
+                currentTime - abilityCooldowns.get(player.getUniqueId()) < cooldownTime) {
+            player.sendMessage(ChatColor.RED + "The scythe's power is recharging!");
+            return;
+        }
+
+        abilityCooldowns.put(player.getUniqueId(), currentTime);
+        freezeEntities(player);
+    }
+
+    private void freezeEntities(Player player) {
+        player.getWorld().playSound(player.getLocation(), Sound.BLOCK_GLASS_BREAK, 1.0f, 1.0f);
+        for (Entity entity : player.getNearbyEntities(5, 5, 5)) {
+            if (entity.getType() == EntityType.PLAYER || entity.getType() == EntityType.MOB) {
+                entity.setVelocity(new Vector(0, 0, 0));
+                entity.setFreezeTicks(100);
+                Bukkit.getScheduler().runTaskLater(this, () -> entity.setFreezeTicks(0), 100L);
+            }
+        }
+    }
+
+    private boolean isFrostScythe(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        ItemMeta meta = item.getItemMeta();
+        return meta != null && meta.getPersistentDataContainer().has(new NamespacedKey("frostking", "scythe"), PersistentDataType.INTEGER);
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage("Only players can use this command!");
+            return true;
+        }
+        Player player = (Player) sender;
+        if (label.equalsIgnoreCase("givefrostscythe")) {
+            player.getInventory().addItem(createFrostScythe());
+            player.sendMessage(ChatColor.AQUA + "The Frost Scythe has been bestowed upon you!");
+            return true;
+        }
+        if (label.equalsIgnoreCase("spawnfrostcastle")) {
+            generateFrostCastle(player.getLocation());
+            player.sendMessage(ChatColor.BLUE + "A Frost Castle emerges from the frozen lands...");
+            return true;
+        }
+        return false;
+    }
+
+    private void generateFrostCastle(Location loc) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                for (int x = -5; x <= 5; x++) {
+                    for (int z = -5; z <= 5; z++) {
+                        for (int y = 0; y <= 7; y++) {
+                            Block block = loc.getWorld().getBlockAt(loc.getBlockX() + x, loc.getBlockY() + y, loc.getBlockZ() + z);
+                            if (y == 0 || y == 7 || x == -5 || x == 5 || z == -5 || z == 5) {
+                                block.setType(Material.ICE);
+                            } else if (y == 6) {
+                                block.setType(Material.PACKED_ICE);
+                            } else {
+                                block.setType(Material.AIR);
+                            }
+                        }
+                    }
+                }
+            }
+        }.runTaskLater(this, 20L);
+    }
+}
