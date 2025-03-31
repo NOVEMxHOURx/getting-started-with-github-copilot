@@ -1,0 +1,103 @@
+package com.frostking.scythe;
+
+import org.bukkit.*;
+import org.bukkit.block.Block;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.Vector;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.UUID;
+
+public class FrostScythePlugin extends JavaPlugin implements Listener, CommandExecutor {
+    private final HashMap<UUID, Long> abilityCooldowns = new HashMap<>();
+    private final long cooldownTime = 23000; // 23 seconds cooldown
+
+    @Override
+    public void onEnable() {
+        Bukkit.getPluginManager().registerEvents(this, this);
+        this.getCommand("givefrostscythe").setExecutor(this);
+    }
+
+    public static ItemStack createFrostScythe() {
+        ItemStack scythe = new ItemStack(Material.NETHERITE_AXE);
+        ItemMeta meta = scythe.getItemMeta();
+        assert meta != null;
+        meta.setDisplayName(ChatColor.AQUA + "Frost " + ChatColor.BLUE + "Scythe");
+        meta.setLore(List.of(
+                ChatColor.GRAY + "Forged in the heart of an eternal blizzard...",
+                ChatColor.DARK_AQUA + "Wielded by the Frost King himself.",
+                ChatColor.BLUE + "You are the Frost King now."
+        ));
+        meta.getPersistentDataContainer().set(new NamespacedKey("frostking", "scythe"), PersistentDataType.STRING, "true");
+        scythe.setItemMeta(meta);
+        return scythe;
+    }
+
+    @EventHandler
+    public void onPlayerInteract(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        ItemStack item = player.getInventory().getItemInMainHand();
+        if (item.hasItemMeta() && item.getItemMeta().getPersistentDataContainer().has(new NamespacedKey("frostking", "scythe"), PersistentDataType.STRING)) {
+            if (abilityCooldowns.containsKey(player.getUniqueId()) && System.currentTimeMillis() - abilityCooldowns.get(player.getUniqueId()) < cooldownTime) {
+                player.sendMessage(ChatColor.RED + "The Frost Scythe is still recharging!");
+                return;
+            }
+            abilityCooldowns.put(player.getUniqueId(), System.currentTimeMillis());
+            player.sendMessage(ChatColor.AQUA + "You unleash the Frost Scythe's power!");
+            player.getWorld().playSound(player.getLocation(), Sound.ENTITY_WITHER_SHOOT, 1f, 0.5f);
+            player.getWorld().spawnParticle(Particle.SNOWFLAKE, player.getLocation(), 50);
+            for (Entity entity : player.getNearbyEntities(5, 2, 5)) {
+                if (entity instanceof Player target) {
+                    target.setVelocity(new Vector(0, 1, 0));
+                    target.damage(6.0);
+                    target.getWorld().playSound(target.getLocation(), Sound.ENTITY_PLAYER_HURT_FREEZE, 1f, 1f);
+                }
+            }
+        }
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("givefrostscythe") && sender instanceof Player) {
+            Player player = (Player) sender;
+            player.getInventory().addItem(createFrostScythe());
+            player.sendMessage(ChatColor.AQUA + "You have received the legendary Frost Scythe!");
+            return true;
+        }
+        return false;
+    }
+
+    // Feature: Scythe on Back
+    @EventHandler
+    public void onPlayerSwitchItem(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        if (!player.getInventory().getItemInMainHand().equals(createFrostScythe())) {
+            player.sendMessage(ChatColor.GRAY + "The Frost Scythe rests on your back.");
+            player.getWorld().spawnParticle(Particle.SNOWFLAKE, player.getLocation(), 20);
+        }
+    }
+
+    // Feature: Throne Block for Scythe Placement
+    @EventHandler
+    public void onBlockClick(PlayerInteractEvent event) {
+        Block block = event.getClickedBlock();
+        if (block != null && block.getType() == Material.ICE) {
+            Player player = event.getPlayer();
+            player.sendMessage(ChatColor.AQUA + "You find an ancient block of ice... something is sealed inside.");
+        }
+    }
+}
